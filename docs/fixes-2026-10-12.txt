@@ -1,0 +1,145 @@
+魔方工具检查与修复包说明
+检查日期：2026-10-12
+
+一、结论
+
+原始目录检查后发现缺陷，因此没有部署原包。
+全部修改均存放在本修复包中，原始目录未做任何修改。
+
+修复包目录：
+C:\Users\Lenovo\Desktop\魔方工具\修复包_20261012
+
+主要子目录：
+1. 魔方计时器
+   可直接运行的修复版本，含静态页面、server.js、启动计时器.bat 等完整文件。
+2. CFOP公式学习
+   修复后的 CFOP公式学习.html，并已补齐 three.min.js 和 3D可视化样例.html。
+3. cloudflare部署包
+   修复后的 Cloudflare Pages 版本，已同步 app.js、store.js，并包含 functions\sb\[[path]].js。
+4. 校验脚本
+   4 个不依赖第三方库的 Node.js 校验脚本。
+
+二、发现并修复的缺陷
+
+1. 清空成绩后刷新会恢复
+   原行为：清空按钮只删除主存储中的 solves，本机备份仍保留，刷新后备份数据会重新写回。
+   修复位置：魔方计时器\store.js、魔方计时器\app.js。
+   修复方式：新增 clearLocalSolves()，同时清空主存储、writeBackup([]) 和底层备份键；
+   清空按钮改为调用该函数。Cloudflare 部署包中的同名文件已同步。
+
+2. Supabase 代理可用时首次登录仍失败
+   原行为：直连健康检查早于代理地址赋值，代理模式会被误判为不可用，首次登录直接失败。
+   修复位置：魔方计时器\store.js 的 initSupabase()。
+   修复方式：先写入地址和密钥并检测代理，最后仅在直连和代理都不可用且没有保存配置时抛错。
+
+3. 触摸被系统打断后会卡在 ready 状态
+   原行为：touchcancel 已把状态设为 ready，但取消函数只处理 armed，后续操作会错乱。
+   修复位置：魔方计时器\app.js 的 cancelArmed() 和 touchcancel 事件。
+   修复方式：armed、ready 两种阶段都可取消，打断后清理状态和样式。
+
+4. PLL 公式数据有重复和错误
+   原行为：Rb 与 T 使用了相同公式；Na 与 Nb 使用了相同公式。
+   修复位置：CFOP公式学习\CFOP公式学习.html。
+   修复方式：
+   Rb 改为 R' U2 R U2 R' F R U R' U' R' F' R2
+   Na 改为 R U R' U R U R' F' R U R' U' R' F R2 U' R' U2 R U' R'
+
+5. 静态服务器存在异常编码崩溃和目录前缀绕过
+   原行为：请求包含畸形百分号编码时 decodeURIComponent 抛异常，服务器可能退出；
+   仅做字符串前缀判断时，同前缀的兄弟目录存在绕过风险。
+   修复位置：魔方计时器\server.js。
+   修复方式：解码放入 try/catch，异常返回 400；用 path.resolve 后检查目标是否位于
+   ROOT 目录内，越界返回 403，并挡住百分号编码形式的同级和上级目录访问。
+
+6. CFOP 页面在异常数据下会白屏，完成练习后点“看答案”可能报错
+   原行为：localStorage 的 cfop_mastered 被损坏时 JSON.parse 抛错，整页脚本停止；
+   练习结束后“看答案”可能访问空对象。
+   修复位置：CFOP公式学习\CFOP公式学习.html。
+   修复方式：loadMastered() 增加 try/catch 并回退为空集合；查看答案前检查当前题目。
+
+7. PLL 练习判题始终判错
+   原行为：按钮选项传的是 id（如 Ua），判题却只与 name（如 Ua · 换相邻边）比较，
+   因此正确答案也被判错。
+   修复位置：CFOP公式学习\CFOP公式学习.html。
+   修复方式：判题同时接受 it.id 和 it.name。
+
+三、校验结果
+
+在“校验脚本”目录分别执行：
+
+node 校验_CFOP公式.js ..\CFOP公式学习\CFOP公式学习.html
+node 校验_清空成绩与代理回退.js ..\魔方计时器\store.js ..\cloudflare部署包\store.js
+node 校验_静态文件服务.js ..\魔方计时器\server.js 18923
+node 校验_计时器交互.js ..\魔方计时器
+
+2026-10-12 最终结果：
+1. CFOP 公式检查全部通过：
+   pll=21、oll=57、f2l=41、bridge=45，解析、自解、case 去重、合法性均通过。
+2. 清空成绩与代理回退检查全部通过：
+   两套 store.js 均验证主存储和备份清空、代理回退、双端失败拒绝。
+3. 静态文件服务检查全部通过：
+   正常文件 200、畸形编码 400、同级和上级目录 403，服务不会因异常请求退出。
+4. 计时器交互检查全部通过：
+   ready 与 armed 取消、touchcancel 复位、清空后刷新不恢复均通过。
+
+真实 Chrome 冒烟测试结果：
+1. 魔方计时器 11 项全部通过，包括服务启动、页面无 JS 报错、空格计时、
+   落成绩、touchcancel 复位、清空后刷新仍为空。
+2. CFOP 页面 13 项全部通过，包括 4 个标签页卡片数量、3D 查看器开关、
+   练习完整流程、完成态“看答案”、损坏存储数据恢复。
+
+关键文件 SHA256：
+app.js
+D658BD24D887A3991629B5F4D0C5A035396F8D8C99CFDB111FE38E14172B70B4
+
+store.js
+531F2A58AC19CBEB56CBCC8037430D86CAF1D9ADA937F281A6741C0139F25B20
+
+“魔方计时器”和“cloudflare部署包”中的 app.js、store.js 哈希一致。
+
+四、部署前准备
+
+1. 安装 Node.js 18 或更高版本。
+2. Cloudflare 部署需要一个已登录的 Cloudflare 账号。
+3. 原目录中的 supabase-config.js、数据库表结构和 Cloudflare 函数均已带入修复包。
+4. 不要直接修改原目录。后续若验证无误，应以修复包为发布来源。
+
+五、方案一：Cloudflare Pages 部署
+
+打开 PowerShell，执行：
+
+cd "C:\Users\Lenovo\Desktop\魔方工具\修复包_20261012\cloudflare部署包"
+npx wrangler login
+npx wrangler pages deploy . --project-name=magiccube
+
+说明：
+1. magiccube 是示例项目名，如 Cloudflare 中已有不同项目名，请替换成实际名称。
+2. 必须使用 wrangler CLI 上传，不能只把文件拖到 Pages 网页上传框。
+   网页拖拽上传不会部署 functions\sb\[[path]].js，缺少该函数会导致 /sb 代理失效。
+3. 部署完成后打开 wrangler 返回的网址，检查页面加载、成绩写入和跨设备同步。
+4. 若浏览器仍显示旧资源，按 Ctrl+F5 强制刷新，或在站点设置中清除缓存。
+
+六、方案二：本机或局域网运行
+
+1. 将整个“魔方计时器”目录复制到目标电脑。
+2. 目标电脑安装 Node.js。
+3. 双击“启动计时器.bat”。
+4. 默认地址为：
+   http://127.0.0.1:8902/index.html
+5. 局域网其他设备访问时，使用运行服务器的电脑局域网 IP，例如：
+   http://192.168.1.10:8902/index.html
+   可在服务器窗口查看局域网地址，也可访问：
+   http://127.0.0.1:8902/__lanip
+
+七、回滚
+
+1. Cloudflare Pages 可在控制台的 Deployments 中选择旧版本回滚。
+2. 本机版回滚时，直接恢复原先保存的完整目录即可。
+3. 原始目录当前未被本次检查修改，可作为对照和备份来源。
+
+八、本次未执行的操作
+
+1. 未修改原始目录中的任何文件。
+2. 未执行 wrangler login 或 Cloudflare 部署。
+3. 未覆盖原目录，也未安装常驻服务。
+4. 修复包已经完成静态校验和真实浏览器冒烟，可由使用者按上述步骤部署。

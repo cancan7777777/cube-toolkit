@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+.env
+.env.*
+*.log
+*.tmp
+*.bak
+*.zip
+*.tar.gz
+.DS_Store
+Thumbs.db
