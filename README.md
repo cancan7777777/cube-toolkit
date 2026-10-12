@@ -28,7 +28,7 @@ cd timer
 node server.js 8902
 ```
 
-浏览器打开 <http://127.0.0.1:8902/index.html>。Windows 用户也可以双击 `timer/启动计时器.bat`。同一 Wi-Fi 下，用服务器输出中的局域网地址可在手机访问。
+浏览器打开 <http://127.0.0.1:8902/index.html>。Windows 用户也可以双击 `timer/启动计时器.bat`；macOS 用户双击 `timer/启动计时器.command`。同一 Wi-Fi 下，用服务器输出中的局域网地址可在手机访问。
 
 CFOP 学习器无需服务器：
 
@@ -74,6 +74,20 @@ node validation/校验_计时器交互.js timer
 ## 说明
 
 本仓库发布本机与局域网版本，不包含 Cloudflare Pages 部署包。所有界面文案以中文为主，适合速拧练习和 CFOP/桥式学习。
+
+## 下载
+
+从 [Releases](https://github.com/cancan7777777/cube-toolkit/releases) 获取对应平台的压缩包：
+
+- `cube-toolkit-v1.0.0-windows.zip`：Windows
+- `cube-toolkit-v1.0.0-macos.zip`：macOS
+
+解压后进入 `timer` 目录，双击对应启动脚本即可。首次使用 macOS 脚本时，如果 Gatekeeper 拦截，可在终端执行：
+
+```sh
+chmod +x 启动计时器.command
+xattr -d com.apple.quarantine 启动计时器.command
+```
 
 ## License
 
