@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>CubeTimer · 魔方计时</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -123,6 +124,16 @@
       <div class="stat-val" id="st-trim">—</div>
       <div class="stat-sub">去掉最快最慢</div>
     </div>
+    <div class="card stat-card">
+      <div class="stat-label">Ao5</div>
+      <div class="stat-val" id="st-ao5">—</div>
+      <div class="stat-sub" id="st-ao5-best">最佳 —</div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-label">Ao12</div>
+      <div class="stat-val" id="st-ao12">—</div>
+      <div class="stat-sub" id="st-ao12-best">最佳 —</div>
+    </div>
   </div>
 
   <div class="card">
@@ -234,6 +245,16 @@
     <div class="card-head"><span class="label">数据</span></div>
     <p class="desc">清空本机所有成绩，账号云端数据不受影响。</p>
     <button id="btn-clear" class="btn danger">清空本机数据</button>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span class="label">数据备份</span></div>
+    <p class="desc">导出 JSON 可完整保留打乱、罚时和账号归属信息；导入时会按记录 ID 合并，重复导入不会产生重复成绩。</p>
+    <div class="row" style="gap:8px;flex-wrap:wrap;justify-content:flex-start">
+      <button id="btn-export-json" class="btn ghost">导出 JSON</button>
+      <button id="btn-import-json" class="btn ghost">导入 JSON</button>
+      <input id="import-json-file" type="file" accept=".json,application/json" hidden>
+    </div>
   </div>
 
   <p class="ver">CubeTimer v1.0 · 数据仅存于你的账号</p>

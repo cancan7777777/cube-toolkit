@@ -297,6 +297,10 @@ body {
 .stat-val.best { color: var(--best); }
 .stat-val.worst { color: var(--worst); }
 .stat-sub { font-size: 10.5px; color: var(--dim-2); margin-top: 3px; }
+
+@media (max-width: 420px) {
+  .cards { grid-template-columns: 1fr; }
+}
 .chart { width: 100%; height: 168px; display: block; }
 
 /* 按天统计 */

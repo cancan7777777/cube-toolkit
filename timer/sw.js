@@ -1,5 +1,5 @@
 /* CubeTimer Service Worker —— 离线可用（App Shell 缓存） */
-const CACHE = 'cubetimer-v29';
+const CACHE = 'cubetimer-v31';
 const ASSETS = [
   './',
   './index.html',

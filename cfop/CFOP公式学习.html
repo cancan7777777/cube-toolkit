@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CFOP 三层公式 · PLL / OLL / F2L + 桥式扩展</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
 :root {
   --bg: #0e1116;
@@ -117,6 +118,7 @@ main { padding: 20px 24px 60px; }
   font-size: 10.5px; padding: 1px 7px; border-radius: 4px;
 }
 .tag.warn { color: var(--warn); border-color: #4a3c14; }
+.tag.weak { color: var(--warn); border-color: #6b531a; }
 .tag.moves { font-family: "SF Mono", Consolas, monospace; }
 .alg {
   background: #0b0e12; border: 1px solid var(--line); border-radius: 6px;
@@ -917,6 +919,50 @@ let practiceMode = false;
 let practiceQueue = [];
 let practiceIdx = 0;
 let practiceScore = 0;
+let practiceCurrentRecorded = false;
+
+const PRACTICE_STATS_KEY = 'cfop_stats_v1';
+
+function loadPracticeStats() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PRACTICE_STATS_KEY) || '{}');
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+    const out = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (!/^(pll|oll|f2l|bridge):/.test(key) || !value || typeof value !== 'object') continue;
+      const attempts = Math.max(0, Math.floor(Number(value.attempts) || 0));
+      const correct = Math.min(attempts, Math.max(0, Math.floor(Number(value.correct) || 0)));
+      if (attempts) out[key] = { attempts, correct };
+    }
+    return out;
+  } catch (e) {
+    return {};
+  }
+}
+
+function savePracticeStats() {
+  try { localStorage.setItem(PRACTICE_STATS_KEY, JSON.stringify(practiceStats)); } catch (e) { /* 忽略 */ }
+}
+
+let practiceStats = loadPracticeStats();
+
+function practiceRate(stats) {
+  return stats && stats.attempts ? Math.round(stats.correct / stats.attempts * 100) : null;
+}
+
+function practiceWeight(item, kind) {
+  const stats = practiceStats[kind + ':' + item.id];
+  if (!stats || !stats.attempts) return 3;
+  const wrong = stats.attempts - stats.correct;
+  return 1 + wrong * 3 + (stats.correct === 0 ? 1 : 0) + Math.max(0, 5 - stats.attempts) * 0.2;
+}
+
+function buildPracticeQueue(src, kind) {
+  // 先随机打散，再按弱项权重排序；每个 case 在一轮中只出现一次。
+  return src.slice()
+    .sort(() => Math.random() - 0.5)
+    .sort((a, b) => practiceWeight(b, kind) - practiceWeight(a, kind));
+}
 
 /* ---------- 视角控制 ---------- */
 const VIEW = { rot: '' };   // '', 'y', "y'", 'y2'
@@ -965,9 +1011,13 @@ function renderCase(item, kind) {
 
   const tags = document.createElement('div');
   tags.className = 'tags';
+  const ps = practiceStats[key];
+  const rate = practiceRate(ps);
+  const weak = ps && ps.attempts && rate < 70;
   tags.innerHTML = `<span class="tag">${item.grp}</span>` +
     (item.frag ? '<span class="tag warn">手法片段 · 需接续</span>' : '') +
-    `<span class="tag moves">${parseAlg(item.alg).length} 步</span>`;
+    `<span class="tag moves">${parseAlg(item.alg).length} 步</span>` +
+    `<span class="tag${weak ? ' weak' : ''}">练习 ${ps ? ps.attempts : 0}${rate != null ? ' · ' + rate + '%' : ''}</span>`;
   info.appendChild(tags);
 
   const alg = document.createElement('div');
@@ -1116,8 +1166,10 @@ function startPractice() {
   const src = { f2l: f2l, oll: oll, pll: pll, bridge: bridge }[currentTab];
   practiceQueue = src.filter((it) => !mastered.has(currentTab + ':' + it.id));
   if (!practiceQueue.length) practiceQueue = src.slice();
+  practiceQueue = buildPracticeQueue(practiceQueue, currentTab);
   practiceIdx = 0;
   practiceScore = 0;
+  practiceCurrentRecorded = false;
   document.getElementById('practice').hidden = false;
   document.getElementById('main').hidden = true;
   drawPractice();
@@ -1126,6 +1178,7 @@ function startPractice() {
 function drawPractice() {
   const box = document.getElementById('pCube');
   const it = practiceQueue[practiceIdx];
+  practiceCurrentRecorded = false;
   if (CUBE3D_OK) {
     practiceCubeEnsure().setState(rotateIfNeeded(caseFromAlg(it.alg)));
     document.getElementById('pCtrls').hidden = false;
@@ -1145,7 +1198,18 @@ function drawPractice() {
     b.onclick = () => {
       // PLL 的选项用的是 id（Ua / H / Z …），其他页用的是 name，
       // 两边都要能判对，否则 PLL 练习点了正确答案也不会前进
-      if (c === it.id || c === it.name) { practiceScore++; nextPractice(); }
+      const correct = c === it.id || c === it.name;
+      if (!practiceCurrentRecorded) {
+        practiceCurrentRecorded = true;
+        const key = currentTab + ':' + it.id;
+        const stats = practiceStats[key] || { attempts: 0, correct: 0 };
+        stats.attempts++;
+        if (correct) stats.correct++;
+        practiceStats[key] = stats;
+        savePracticeStats();
+        if (correct) practiceScore++;
+      }
+      if (correct) nextPractice();
       else { b.classList.add('wrong'); setTimeout(() => b.classList.remove('wrong'), 400); }
     };
     wrap.appendChild(b);
@@ -1155,7 +1219,13 @@ function drawPractice() {
 function nextPractice() {
   practiceIdx++;
   if (practiceIdx >= practiceQueue.length) {
-    document.getElementById('pTitle').textContent = `完成！共 ${practiceQueue.length} 题，正确 ${practiceScore}`;
+    const weakCount = practiceQueue.filter((it) => {
+      const stats = practiceStats[currentTab + ':' + it.id];
+      return stats && stats.attempts && stats.correct / stats.attempts < 0.7;
+    }).length;
+    const rate = practiceQueue.length ? Math.round(practiceScore / practiceQueue.length * 100) : 0;
+    document.getElementById('pTitle').textContent =
+      `完成！共 ${practiceQueue.length} 题，正确 ${practiceScore}（${rate}%）· 弱项 ${weakCount} 个`;
     document.getElementById('pCube').innerHTML = '';
     document.getElementById('pChoices').innerHTML = '';
     document.getElementById('pCtrls').hidden = true;
@@ -1208,7 +1278,7 @@ document.addEventListener('DOMContentLoaded', init);
 </script>
 
 <!-- ============ 3D 可视化（Three.js，本地离线库） ============ -->
-<script src="three.min.js"></script>
+<script src="three.global.js"></script>
 <script>
 /* =========================================================
    3D 渲染模块

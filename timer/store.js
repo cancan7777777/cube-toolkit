@@ -822,6 +822,83 @@ async function restoreFromBackup() {
   return add.length;
 }
 
+/** 把外部 JSON 备份转换成受控记录，拒绝畸形时间和未知项目。 */
+function sanitizeImportedSolve(item) {
+  if (!item || typeof item !== 'object') return null;
+  const time = Number(item.time_ms);
+  if (!Number.isFinite(time) || time < 0 || time > 86400000) return null;
+
+  const rawCreated = typeof item.created_at === 'number'
+    ? item.created_at
+    : Date.parse(item.created_at);
+  const created_at = Number.isFinite(rawCreated) ? rawCreated : Date.now();
+  const event = ['3x3', '2x2', '4x4', 'OH'].includes(item.event) ? item.event : '3x3';
+  const rawPenalty = Math.max(0, Math.min(60, Number(item.penalty) || 0));
+  const penalty = Math.round(rawPenalty / 2) * 2;
+  const rawInspection = Number(item.inspection_penalty) || 0;
+  const inspection_penalty = rawInspection === 2 ? 2 : 0;
+  const dnf = item.dnf === true || item.dnf === 'YES';
+
+  return {
+    client_id: isUuid(item.client_id) ? item.client_id : uuid(),
+    event,
+    scramble: typeof item.scramble === 'string' ? item.scramble.slice(0, 500) : '',
+    time_ms: Math.round(time),
+    penalty: dnf ? 0 : penalty,
+    inspection_penalty: dnf ? 0 : inspection_penalty,
+    dnf,
+    session_id: isUuid(item.session_id) ? item.session_id : null,
+    created_at,
+    date_key: localDateKey(new Date(created_at)),
+    device: 'JSON 导入',
+    owner: currentOwner(),
+    synced: false,
+  };
+}
+
+/**
+ * 导入 JSON 备份（兼容 CubeTimer 导出对象和纯数组）。
+ * 相同 client_id 会合并更新；若与当前账号归属不同则换发新 ID，避免跨账号覆盖。
+ */
+async function importSolveData(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    throw new Error('JSON 格式不正确');
+  }
+  const rows = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.solves) ? parsed.solves : null);
+  if (!rows) throw new Error('没有找到 solves 成绩数组');
+  if (rows.length > 20000) throw new Error('一次最多导入 20000 条成绩');
+
+  const before = await store.all('solves');
+  const existing = new Map(before.map((r) => [r.client_id, r]));
+  const records = [];
+  let added = 0;
+  let updated = 0;
+
+  for (const item of rows) {
+    const rec = sanitizeImportedSolve(item);
+    if (!rec) continue;
+    const old = existing.get(rec.client_id);
+    if (old && ownOf(old) !== rec.owner) {
+      rec.client_id = uuid();
+      added++;
+    } else if (old) {
+      updated++;
+    } else {
+      added++;
+    }
+    existing.set(rec.client_id, rec);
+    records.push(rec);
+  }
+  if (!records.length) throw new Error('没有可导入的有效成绩');
+
+  await store.putAll('solves', records);
+  await refreshBackup();
+  return { added, updated, total: records.length };
+}
+
 async function saveSolve(o) {
   const rec = {
     client_id: uuid(),
@@ -1047,6 +1124,40 @@ function statsOf(solves) {
   return out;
 }
 
+/** 计算一个固定长度窗口的 WCA Average：去掉最快、最慢后取中间值。
+    最多允许一个 DNF；DNF 视为最慢并被剔除，两个及以上 DNF 返回 null。 */
+function averageOfWindow(window) {
+  if (!window || window.length < 3) return null;
+  const values = window.map((s) => effectiveMs(s));
+  const invalidCount = values.filter((v) => v == null || !Number.isFinite(v)).length;
+  if (invalidCount > 1) return null;
+  const sorted = values
+    .map((v) => (v == null || !Number.isFinite(v) ? Infinity : v))
+    .sort((a, b) => a - b);
+  const middle = sorted.slice(1, -1).filter((v) => Number.isFinite(v));
+  if (middle.length !== window.length - 2 || !middle.length) return null;
+  return Math.round(middle.reduce((a, b) => a + b, 0) / middle.length);
+}
+
+/** 返回最近 n 把的滚动平均；顺序按时间正序，不受调用方排序影响。 */
+function rollingAverage(solves, n) {
+  const list = (solves || []).slice().sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
+  if (list.length < n) return null;
+  return averageOfWindow(list.slice(-n));
+}
+
+/** 返回历史所有完整窗口中的最佳滚动平均。 */
+function bestRollingAverage(solves, n) {
+  const list = (solves || []).slice().sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
+  if (list.length < n) return null;
+  let best = null;
+  for (let i = 0; i <= list.length - n; i++) {
+    const avg = averageOfWindow(list.slice(i, i + n));
+    if (avg != null && (best == null || avg < best)) best = avg;
+  }
+  return best;
+}
+
 /**
  * Bo5 / Bo10 一次赛制结果
  *
@@ -1100,6 +1211,7 @@ if (typeof module !== 'undefined' && module.exports) {
     scrambleTooSimple, scrambledPieceCount,
     localDateKey, fmtDateCN, weekdayCN, uuid,
     saveSolve, deleteSolve, allSolves, statsOf, boResult, groupByDate,
+    averageOfWindow, rollingAverage, bestRollingAverage,
     fmtTime, effectiveMs,
   };
 }

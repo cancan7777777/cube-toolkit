@@ -28,6 +28,7 @@ const S = {
 
   inspectStart: 0,
   inspectRaf: null,
+  pendingInspection: 0,      // 松开开始瞬间冻结的观察罚时
 
   locked: false,
   lastResult: null,         // 停止后展示的成绩（用于判罚）
@@ -139,6 +140,8 @@ function resetRun() {
   S.phase = 'idle';
   S.elapsed = 0;
   S.lastResult = null;
+  S.inspectStart = 0;
+  S.pendingInspection = 0;
   stopInspect();
   updateDisplay(0);
   const box = $('#timer-box');
@@ -152,6 +155,7 @@ function resetRun() {
 function resetInspect() {
   stopInspect();
   S.inspectStart = 0;
+  S.pendingInspection = 0;
   const fill = $('#inspect-fill');
   fill.style.width = '100%';
   fill.className = '';
@@ -163,10 +167,22 @@ function startInspect() {
     resetInspect();
     return;
   }
+  stopInspect();
   S.inspectStart = performance.now();
+  S.pendingInspection = 0;
   const TOTAL = 15000;
+  let warned8 = false;
+  let warned12 = false;
   const tick = () => {
     const el = performance.now() - S.inspectStart;
+    if (el >= 8000 && !warned8) {
+      warned8 = true;
+      beep(440, 0.04);
+    }
+    if (el >= 12000 && !warned12) {
+      warned12 = true;
+      beep(880, 0.07);
+    }
     const left = Math.max(0, TOTAL - el);
     const fill = $('#inspect-fill');
     fill.style.width = (left / TOTAL * 100) + '%';
@@ -180,7 +196,6 @@ function startInspect() {
     if (el > 17500) { stopInspect(); return; }
     S.inspectRaf = requestAnimationFrame(tick);
   };
-  stopInspect();
   S.inspectRaf = requestAnimationFrame(tick);
 }
 
@@ -264,10 +279,13 @@ function cancelArmed() {
 function startRun() {
   if (S.phase !== 'ready') return;   // 只能从就绪态（松开）进入
   clearTimeout(S.armTimer);
+  // 观察罚时必须在选手开始还原的瞬间结算；之后还原耗时不能反过来改变判罚。
+  S.pendingInspection = inspectPenalty();
+  S.inspectStart = 0;
+  stopInspect();
   S.phase = 'running';
   S.startAt = performance.now();
   S.elapsed = 0;
-  stopInspect();                     // 开始还原即结束观察
 
   const box = $('#timer-box');
   box.classList.remove('armed', 'ready');
@@ -304,12 +322,15 @@ function stopRun() {
   if (S.elapsed < 60) {
     toast('太短了，已忽略本次');
     S.phase = 'idle';
+    S.pendingInspection = 0;
+    S.inspectStart = 0;
     $('#hint').textContent = idleHint();
     updateDisplay(0);
     return;
   }
 
-  const insp = inspectPenalty();
+  const insp = S.pendingInspection;
+  S.pendingInspection = 0;
   const dnf = insp === 999;
   updateDisplay(S.elapsed);
 
@@ -610,11 +631,19 @@ function renderTimer() {
 function renderStats() {
   const list = S.cache.filter((s) => s.event === S.event);
   const st = statsOf(list);
+  const ao5 = rollingAverage(list, 5);
+  const ao12 = rollingAverage(list, 12);
+  const bestAo5 = bestRollingAverage(list, 5);
+  const bestAo12 = bestRollingAverage(list, 12);
 
   $('#st-best').textContent = st.best != null ? fmtTime(st.best) : '—';
   $('#st-worst').textContent = st.worst != null ? fmtTime(st.worst) : '—';
   $('#st-mean').textContent = st.mean != null ? fmtTime(st.mean) : '—';
   $('#st-trim').textContent = st.trimmed != null ? fmtTime(st.trimmed) : '—';
+  $('#st-ao5').textContent = ao5 != null ? fmtTime(ao5) : '—';
+  $('#st-ao12').textContent = ao12 != null ? fmtTime(ao12) : '—';
+  $('#st-ao5-best').textContent = bestAo5 != null ? '最佳 ' + fmtTime(bestAo5) : '最佳 —';
+  $('#st-ao12-best').textContent = bestAo12 != null ? '最佳 ' + fmtTime(bestAo12) : '最佳 —';
 
   // 统一按时间倒序：最新记录在最上面
   list.sort((a, b) => b.created_at - a.created_at);
@@ -1269,6 +1298,24 @@ function bindUI() {
     showSyncMsg('本机备份共 ' + backupCount() + ' 条', false);
   };
 
+  $('#btn-export-json').onclick = exportJSON;
+  $('#btn-import-json').onclick = () => $('#import-json-file').click();
+  $('#import-json-file').onchange = async (e) => {
+    const input = e.target;
+    const file = input.files && input.files[0];
+    input.value = ''; // 允许连续选择同一个文件
+    if (!file) return;
+    try {
+      const result = await importSolveData(await file.text());
+      await loadAll();
+      renderTimer(); renderStats(); renderHistory();
+      if (S.user) await flushPending();
+      toast(`JSON 导入完成：新增 ${result.added} · 更新 ${result.updated}`);
+    } catch (err) {
+      toast('导入失败：' + (err.message || '未知错误'));
+    }
+  };
+
   // 连接诊断：逐项检查，输出到同步信息行（手机端同样可用）
   $('#btn-diag').onclick = async () => {
     const btn = $('#btn-diag');
@@ -1439,7 +1486,7 @@ function bindUI() {
     stopInspect();
   });
 
-  startInspect();
+  resetInspect();
 }
 
 /* ---------------- 导出 ---------------- */
@@ -1465,6 +1512,22 @@ function exportCSV() {
   a.click();
   URL.revokeObjectURL(a.href);
   toast('已导出 CSV');
+}
+
+function exportJSON() {
+  if (!S.cache.length) { toast('暂无数据'); return; }
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    solves: S.cache,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `cubetimer-backup-${localDateKey()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 0);
+  toast('已导出 JSON 备份');
 }
 
 /* ---------------- 提示 / 声音 ---------------- */
