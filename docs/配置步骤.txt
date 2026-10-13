@@ -42,7 +42,7 @@ Supabase URL 与 Publishable key 已写入 魔方计时器/supabase-config.js，
 1. 点左侧「Project Settings」（齿轮图标，最下方）
 2. 进入「API」或「API Keys」页面
 3. 找到 Project URL —— 应该类似：
-     https://zvkdpwmotsvwzjznwoyq.supabase.co
+     https://<你的项目引用ID>.supabase.co
 
 4. 回到左侧「API Keys」页面（你截图的那一页），有两个 key：
 
