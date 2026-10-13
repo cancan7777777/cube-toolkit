@@ -57,6 +57,7 @@ cfop/CFOP公式学习.html
 cube-toolkit/
 ├── timer/        # CubeTimer 页面、本地/局域网服务器、PWA 资源
 ├── cfop/         # CFOP 公式学习器（离线 HTML）
+├── cloudflare/   # Cloudflare Pages 部署包（含 /sb/* 反向代理函数）
 ├── database/     # Supabase 表结构与 RLS 修复脚本
 ├── validation/   # Node.js 校验脚本
 └── docs/         # 使用说明与更新记录
@@ -75,7 +76,19 @@ node validation/校验_计时器交互.js timer
 
 ## 说明
 
-本仓库发布本机与局域网版本，不包含 Cloudflare Pages 部署包。所有界面文案以中文为主，适合速拧练习和 CFOP/桥式学习。
+本仓库同时提供本机/局域网版本（`timer/`）与公网部署版本（`cloudflare/`）。所有界面文案以中文为主，适合速拧练习和 CFOP/桥式学习。
+
+## Cloudflare Pages 部署
+
+`cloudflare/` 目录是可整体上传到 Cloudflare Pages 的部署包，用于把计时器发布成公网网址，手机无需与电脑同一 Wi-Fi 即可访问。上传前先把 `cloudflare/supabase-config.js` 填上自己的 Supabase 项目地址和 Publishable key。
+
+```powershell
+cd cloudflare
+npx wrangler login
+npx wrangler pages deploy . --project-name=magiccube
+```
+
+`functions/sb/[[path]].js` 是 Supabase 反向代理，供访问不了 `*.supabase.co` 的网络使用；它通过环境变量 `SUPABASE_HOST` 读取目标域名。计时器会自动探测代理是否可用，不可用时回退为直连，因此即使不部署函数也不影响其他功能。完整步骤见 `docs/cloudflare-deploy.txt`。
 
 ## 下载
 

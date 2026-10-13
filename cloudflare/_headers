@@ -1,0 +1,9 @@
+# Cloudflare Pages 响应头
+# 目的：避免「更新后浏览器仍拿旧文件」——之前反复踩过的坑。
+# 全部走「协商缓存」(no-cache = 每次都向服务器确认)，配合站点内的
+# Service Worker（网络优先 + 离线回退）实现「更新立即生效、断网仍可用」。
+
+/*
+  Cache-Control: no-cache
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

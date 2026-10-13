@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f4f6fa">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>CubeTimer · 魔方计时</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="glow"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo"></span>
+    <span>CubeTimer</span>
+  </div>
+  <div class="top-actions">
+    <span id="sync-dot" class="sync-dot" title="同步状态"></span>
+    <button id="btn-auth" class="btn ghost">登录</button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab on" data-view="timer">计时</button>
+  <button class="tab" data-view="stats">统计</button>
+  <button class="tab" data-view="history">历史</button>
+  <button class="tab" data-view="settings">设置</button>
+</nav>
+
+<!-- ============ 计时 ============ -->
+<section class="view on" id="view-timer">
+
+  <div class="mode-row">
+    <div class="segmented" id="mode">
+      <button class="on" data-mode="bo5">Bo5</button>
+      <button data-mode="bo10">Bo10</button>
+      <button data-mode="free">自由</button>
+    </div>
+    <div class="event-row">
+      <select id="event" class="sel">
+        <option value="3x3">三阶</option>
+        <option value="2x2">二阶</option>
+        <option value="4x4">四阶</option>
+        <option value="OH">单手三阶</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card scramble-card">
+    <div class="card-head">
+      <span class="label">打乱公式</span>
+      <span style="display:flex;gap:7px">
+        <button id="btn-inspect" class="mini" title="观察计时开关">观察计时：开</button>
+        <button id="btn-new-scramble" class="mini" title="换一条">换一条 ↻</button>
+      </span>
+    </div>
+    <div id="scramble" class="scramble">—</div>
+    <div class="inspect">
+      <button id="btn-begin" class="mini begin" title="开始 15 秒观察倒计时">▶ 开始观察</button>
+      <div class="inspect-bar"><i id="inspect-fill"></i></div>
+      <span id="inspect-text" class="inspect-text">待观察</span>
+    </div>
+  </div>
+
+  <!-- 打招呼的看板娘：点击可换一句话 -->
+  <div class="mascot-tip" id="mascot-tip" title="点我换一句">
+    <img src="mascot-chibi.png" alt="看板娘">
+    <div class="tip-bubble"><span id="tip-text">加油，今天的 PB 在等你！</span><i class="tip-tail"></i></div>
+  </div>
+
+  <div id="timer-box" class="timer-box">
+    <div id="display" class="display">0.00</div>
+    <div id="hint" class="hint">空格 / 点击开始</div>
+  </div>
+
+  <div id="lock-bar" class="lock-bar">
+    <button id="btn-lock" class="btn lock">
+      <span class="lock-ico"></span><span id="lock-text">锁定</span>
+    </button>
+    <span class="lock-tip">锁定后其他按键不会影响计时</span>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <span class="label">本次成绩</span>
+      <span id="bo-tag" class="tag">Bo5</span>
+    </div>
+    <div id="solves" class="solves"></div>
+    <div id="bo-result" class="bo-result"></div>
+  </div>
+
+  <div class="keyhint">
+    <div><kbd>空格</kbd>按住→松开开始 · 按一下停止</div>
+    <div><kbd>D</kbd>+2</div>
+    <div><kbd>X</kbd>DNF</div>
+    <div><kbd>Del</kbd>删除上一把</div>
+    <div><kbd>Esc</kbd>结束本轮</div>
+  </div>
+</section>
+
+<!-- ============ 统计 ============ -->
+<section class="view" id="view-stats">
+  <div class="cards">
+    <div class="card stat-card">
+      <div class="stat-label">最快</div>
+      <div class="stat-val best" id="st-best">—</div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-label">最慢</div>
+      <div class="stat-val worst" id="st-worst">—</div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-label">全部平均</div>
+      <div class="stat-val" id="st-mean">—</div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-label">去极值平均</div>
+      <div class="stat-val" id="st-trim">—</div>
+      <div class="stat-sub">去掉最快最慢</div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-label">Ao5</div>
+      <div class="stat-val" id="st-ao5">—</div>
+      <div class="stat-sub" id="st-ao5-best">最佳 —</div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-label">Ao12</div>
+      <div class="stat-val" id="st-ao12">—</div>
+      <div class="stat-sub" id="st-ao12-best">最佳 —</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <span class="label">成绩趋势</span>
+      <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+        <span class="mini-seg" id="chart-metric">
+          <button class="on" data-k="mean">平均</button>
+          <button data-k="best">最快</button>
+          <button data-k="worst">最慢</button>
+          <button data-k="count">次数</button>
+        </span>
+        <span class="mini-seg" id="chart-mode">
+          <button class="on" data-m="day">按天</button>
+          <button data-m="month">按月</button>
+        </span>
+      </span>
+    </div>
+    <canvas id="chart" class="chart"></canvas>
+    <div id="trend-meta" class="desc" style="text-align:center;margin-top:6px"></div>
+  </div>
+
+  <!-- 指定日期查询 -->
+  <div class="card">
+    <div class="card-head">
+      <span class="label">指定日期</span>
+      <span style="display:flex;gap:6px;align-items:center">
+        <button id="day-prev" class="mini" title="前一天">‹</button>
+        <input id="day-pick" class="inp inp-date" type="date">
+        <button id="day-next" class="mini" title="后一天">›</button>
+      </span>
+    </div>
+    <div class="cards" style="margin:0 0 4px">
+      <div class="card stat-card"><div class="stat-label">当天把数</div><div class="stat-val" id="d-count">—</div></div>
+      <div class="card stat-card"><div class="stat-label">当天最快</div><div class="stat-val best" id="d-best">—</div></div>
+      <div class="card stat-card"><div class="stat-label">当天平均</div><div class="stat-val" id="d-mean">—</div></div>
+      <div class="card stat-card"><div class="stat-label">去极值平均</div><div class="stat-val" id="d-trim">—</div></div>
+    </div>
+    <div id="day-list" class="solve-list"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span class="label">按天统计</span></div>
+    <div id="daily" class="daily"></div>
+  </div>
+</section>
+
+<!-- ============ 历史 ============ -->
+<section class="view" id="view-history">
+  <div class="filter-row">
+    <select id="filter-event" class="sel">
+      <option value="">全部项目</option>
+      <option value="3x3">三阶</option>
+      <option value="2x2">二阶</option>
+      <option value="4x4">四阶</option>
+      <option value="OH">单手三阶</option>
+    </select>
+    <button id="btn-export" class="btn ghost">导出 CSV</button>
+  </div>
+  <div id="history" class="history"></div>
+
+</section>
+
+<!-- ============ 设置 ============ -->
+<section class="view" id="view-settings">
+  <div class="card">
+    <div class="card-head"><span class="label">云端同步</span><span id="cfg-state" class="tag">未配置</span></div>
+    <p class="desc">填写 Supabase 项目信息后即可多设备同步。未配置时数据保存在本机浏览器。</p>
+    <p class="desc" style="margin-top:-4px">⚠️ 配置保存在<strong>当前浏览器</strong>且<strong>按网址隔离</strong>——请固定用同一网址访问（推荐桌面上的「启动计时器.bat」，永远走
+      <code id="cfg-origin" style="user-select:all">http://127.0.0.1:8902</code>）。换了网址（如双击打开）需重新配置一次。</p>
+    <p class="desc" style="margin-top:-4px">💡 想彻底免重复填写：把 URL 和 key 写进同目录的 <code>supabase-config.js</code>，任何网址打开都会自动读取。</p>
+    <input id="cfg-url" class="inp" placeholder="Supabase 项目 URL：https://xxxx.supabase.co" autocomplete="off">
+    <input id="cfg-key" class="inp" placeholder="Publishable key：sb_publishable_…（控制台 API Keys 复制）" autocomplete="off">
+    <button id="btn-save-cfg" class="btn primary">保存配置</button>
+    <div class="row" style="margin-top:14px;gap:8px">
+      <button id="btn-sync-now" class="btn ghost">立即同步</button>
+      <button id="btn-sync-all" class="btn ghost" title="把本机全部成绩重新上传一次">全量重新上传</button>
+      <button id="btn-diag" class="btn ghost" title="检查本机能否连上云端">连接诊断</button>
+      <button id="btn-restore-bk" class="btn ghost" title="从本机备份找回成绩">从本机备份恢复</button>
+      <span id="sync-msg" class="desc" style="margin:0">上传本机成绩并拉取云端数据</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span class="label">计时偏好</span></div>
+    <label class="row"><span>按住时长（松开即开始）</span>
+      <select id="pref-start" class="sel sm">
+        <option value="0">无（按住即就绪）</option>
+        <option value="200">0.2 秒</option>
+        <option value="500" selected>0.5 秒</option>
+        <option value="1000">1 秒</option>
+      </select>
+    </label>
+    <label class="row"><span>观察计时</span>
+      <select id="pref-inspect" class="sel sm">
+        <option value="1" selected>开启（WCA 15s）</option>
+        <option value="0">关闭</option>
+      </select>
+    </label>
+    <label class="row"><span>声音反馈</span>
+      <select id="pref-sound" class="sel sm">
+        <option value="1" selected>开启</option>
+        <option value="0">关闭</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="card danger-zone">
+    <div class="card-head"><span class="label">数据</span></div>
+    <p class="desc">清空本机所有成绩，账号云端数据不受影响。</p>
+    <button id="btn-clear" class="btn danger">清空本机数据</button>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span class="label">数据备份</span></div>
+    <p class="desc">导出 JSON 可完整保留打乱、罚时和账号归属信息；导入时会按记录 ID 合并，重复导入不会产生重复成绩。</p>
+    <div class="row" style="gap:8px;flex-wrap:wrap;justify-content:flex-start">
+      <button id="btn-export-json" class="btn ghost">导出 JSON</button>
+      <button id="btn-import-json" class="btn ghost">导入 JSON</button>
+      <input id="import-json-file" type="file" accept=".json,application/json" hidden>
+    </div>
+  </div>
+
+  <p class="ver">CubeTimer v1.0 · 数据仅存于你的账号</p>
+
+  <!-- 设置页装饰立绘 -->
+  <div class="settings-mascot"><img src="mascot-full.jpg" alt="看板娘"></div>
+</section>
+
+<!-- ============ 登录弹窗 ============ -->
+<div id="auth-modal" class="modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="auth-title">登录</h2>
+      <button id="auth-close" class="icon-btn">✕</button>
+    </div>
+    <p id="auth-sub" class="desc">登录后可在手机与其他设备查看成绩</p>
+    <input id="auth-email" class="inp" type="email" placeholder="邮箱" autocomplete="email">
+    <input id="auth-pass" class="inp" type="password" placeholder="密码（至少 6 位）" autocomplete="current-password">
+    <div id="auth-msg" class="msg"></div>
+    <button id="auth-submit" class="btn primary block">登录</button>
+    <button id="auth-switch" class="btn ghost block">没有账号？去注册</button>
+    <button id="auth-skip" class="btn text block">先不登录，本机使用</button>
+  </div>
+</div>
+
+<div id="pb-party" class="pb-party">
+  <img id="pb-img" src="ds-chan.png" alt="">
+  <div class="pb-bubble"><span id="pb-text">New PB!</span><span class="pb-thumb"></span></div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="supabase-config.js"></script>
+<script src="scramble.js"></script>
+<script src="store.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
