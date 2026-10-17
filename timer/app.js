@@ -226,7 +226,7 @@ function inspectPenalty() {
 function pressDown() {
   if (S.phase === 'idle') startArmed();
   else if (S.phase === 'running') stopRun();       // 停止立即响应
-  else if (S.phase === 'review') nextTurn();        // 空格进入下一把
+  else if (S.phase === 'review') { resetRun(); nextTurn(); }        // 空格进入下一把
   /* armed / ready 状态下的再次按下忽略：必须先松开 */
 }
 
